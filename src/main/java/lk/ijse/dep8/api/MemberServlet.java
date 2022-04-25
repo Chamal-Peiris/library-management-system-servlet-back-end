@@ -14,6 +14,7 @@ import javax.sql.DataSource;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Locale;
 
@@ -45,8 +46,21 @@ public class MemberServlet extends HttpServlet {
                 throw new ValidationException("Invalid Contact");
             }
 
+
+
             try(Connection connection = pool.getConnection()) {
-                PreparedStatement stm = connection.prepareStatement("INSERT INTO  member (nic,name,mobile) VALUES (?,?,?)");
+
+                PreparedStatement stm1 = connection.prepareStatement("SELECT * FROM member WHERE nic =?");
+                stm1.setString(1,member.getNic());
+                ResultSet rst = stm1.executeQuery();
+                if(rst.next()){
+                    response.sendError(HttpServletResponse.SC_CONFLICT,"Duplication NIC");
+                    return;
+                }
+
+
+
+                PreparedStatement stm = connection.prepareStatement("INSERT INTO  member (nic,name,contact) VALUES (?,?,?)");
                 stm.setString(1,member.getNic());
                 stm.setString(2,member.getName());
                 stm.setString(3,member.getContact());
