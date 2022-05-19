@@ -6,4 +6,8 @@
     <resource-env-ref>
         <resource-env-ref-name>jdbc/pool4library</resource-env-ref-name>
     </resource-env-ref>
+    <context-param>
+        <param-name>origin</param-name>
+        <param-value>localhost</param-value>
+    </context-param>
 </web-app>

@@ -3,9 +3,9 @@ package lk.ijse.dep8.api;
 import jakarta.json.bind.Jsonb;
 import jakarta.json.bind.JsonbBuilder;
 import jakarta.json.bind.JsonbException;
+import lk.ijse.dep8.dto.BookDTO;
 import lk.ijse.dep8.dto.MemberDTO;
 import lk.ijse.dep8.exception.ValidationException;
-import org.eclipse.yasson.internal.serializer.SqlDateTypeDeserializer;
 
 import javax.annotation.Resource;
 import javax.servlet.*;
@@ -19,54 +19,40 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 
-@WebServlet(name = "MemberServlet", value = {"/members/*"})
-public class MemberServlet extends HttpServlet {
+@WebServlet(name = "BookServlet", value = {"/v1/books/*"})
+public class BookServlet extends HttpServlet {
     @Resource(name = "java:comp/env/jdbc/pool4library")
     private volatile DataSource pool;
 
     @Override
     protected void doDelete(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
         if (req.getPathInfo() == null || req.getPathInfo().equals("/")) {
-            resp.sendError(HttpServletResponse.SC_NOT_IMPLEMENTED, "Unable to delete all members yet");
+            resp.sendError(HttpServletResponse.SC_NOT_IMPLEMENTED, "Unable to delete all books");
             return;
-        } else if (req.getPathInfo() != null &&
-                !req.getPathInfo().substring(1).matches("\\d{9}[Vv][/]?")) {
-            resp.sendError(HttpServletResponse.SC_NOT_FOUND, "Member not found");
+        } else if (req.getPathInfo() != null && !req.getPathInfo().substring(1).matches("\\d{9}")) {
+            resp.sendError(HttpServletResponse.SC_NOT_FOUND, "Invalid members");
             return;
         }
-
-        String nic = req.getPathInfo().replaceAll("[/]", "");
+        String isbn = req.getPathInfo().replaceAll("[/]", "");
 
         try (Connection connection = pool.getConnection()) {
-            PreparedStatement stm = connection.
-                    prepareStatement("SELECT * FROM member WHERE nic=?");
-            stm.setString(1, nic);
+            PreparedStatement stm = connection.prepareStatement("SELECT * FROM book WHERE isbn=?");
+            stm.setString(1, isbn);
             ResultSet rst = stm.executeQuery();
-
             if (rst.next()) {
-                stm = connection.prepareStatement("SELECT * FROM member INNER JOIN issue i on member.nic = i.nic WHERE i.nic = ?");
-                stm.setString(1, nic);
-                if (stm.executeQuery().next()){
-                    resp.sendError(HttpServletResponse.SC_CONFLICT, "Unable to delete the member due to open issue");
-                    return;
-                }
-
-                stm = connection.prepareStatement("DELETE FROM member WHERE nic=?");
-                stm.setString(1, nic);
+                stm = connection.prepareStatement("DELETE FROM book WHERE isbn =?");
+                stm.setString(1, isbn);
                 if (stm.executeUpdate() != 1) {
-                    throw new RuntimeException("Failed to delete the member");
+                    throw new RuntimeException("Failed to delete member");
                 }
-                resp.setStatus(HttpServletResponse.SC_NO_CONTENT);
+                resp.sendError(HttpServletResponse.SC_NO_CONTENT);
             } else {
-                resp.sendError(HttpServletResponse.SC_NOT_FOUND, "Member not found");
+                resp.sendError(HttpServletResponse.SC_NOT_FOUND, "Member Not found");
             }
-        } catch (SQLException | RuntimeException e) {
-            e.printStackTrace();
-            resp.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
         }
-
     }
 
     @Override
@@ -86,13 +72,13 @@ public class MemberServlet extends HttpServlet {
             String sql = null;
 
             if (pagination) {
-                sql = "SELECT * FROM member WHERE nic LIKE ? OR name LIKE ? OR contact LIKE ? LIMIT ? OFFSET ?";
+                sql = "SELECT * FROM book WHERE isbn LIKE ? OR name LIKE ? OR author LIKE ? LIMIT ? OFFSET ?";
             } else {
-                sql = "SELECT * FROM member WHERE nic LIKE ? OR name LIKE ? OR contact LIKE ?";
+                sql = "SELECT * FROM book WHERE isbn LIKE ? OR name LIKE ? OR author LIKE ?";
             }
 
             PreparedStatement stm = connection.prepareStatement(sql);
-            PreparedStatement stmCount = connection.prepareStatement("SELECT count(*) FROM member WHERE nic LIKE ? OR name LIKE ? OR contact LIKE ?");
+            PreparedStatement stmCount = connection.prepareStatement("SELECT count(*) FROM book WHERE isbn LIKE ? OR name LIKE ? OR author LIKE ?");
 
             stm.setString(1, query);
             stm.setString(2, query);
@@ -109,20 +95,20 @@ public class MemberServlet extends HttpServlet {
             }
             ResultSet rst = stm.executeQuery();
 
-            List<MemberDTO> members = new ArrayList<>();
+            List<BookDTO> books = new ArrayList<>();
 
             while (rst.next()) {
-                members.add((new MemberDTO(
-                        rst.getString("nic"),
+                books.add((new BookDTO(
+                        rst.getString("isbn"),
                         rst.getString("name"),
-                        rst.getString("contact")
+                        rst.getString("author")
                 )));
             }
 
             resp.setContentType("application/json");
 
             if (!pagination) {
-                resp.setHeader("X-Count", members.size() + "");
+                resp.setHeader("X-Count", books.size() + "");
             }else{
                 ResultSet rst2 = stmCount.executeQuery();
                 if (rst2.next()){
@@ -131,23 +117,22 @@ public class MemberServlet extends HttpServlet {
             }
 
             Jsonb jsonb = JsonbBuilder.create();
-            jsonb.toJson(members, resp.getWriter());
+            jsonb.toJson(books, resp.getWriter());
 
         } catch (SQLException throwables) {
             throwables.printStackTrace();
         }
-
     }
 
     @Override
     protected void doPost(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
 
-        doSaveOrUpdate(request, response);
+        doSaveOrUpdate(request,response);
     }
 
     @Override
     protected void doPut(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
-        doSaveOrUpdate(req, resp);
+        doSaveOrUpdate(req,resp);
     }
 
     private void doSaveOrUpdate(HttpServletRequest req, HttpServletResponse res) throws IOException {
@@ -161,57 +146,57 @@ public class MemberServlet extends HttpServlet {
         String pathInfo = req.getPathInfo();
 
         if (method.equals("POST") &&
-                !((req.getServletPath().equalsIgnoreCase("/members") ||
-                        req.getServletPath().equalsIgnoreCase("/members/")))) {
+                !((req.getServletPath().equalsIgnoreCase("/books") ||
+                        req.getServletPath().equalsIgnoreCase("/books/")))) {
             res.sendError(HttpServletResponse.SC_NOT_FOUND);
             return;
         } else if (method.equals("PUT") && !(pathInfo != null &&
-                pathInfo.substring(1).matches("\\d{9}[Vv][/]?"))) {
-            res.sendError(HttpServletResponse.SC_NOT_FOUND, "Member does not exist");
+                pathInfo.substring(1).matches("\\d{9}[/]?"))) {
+            res.sendError(HttpServletResponse.SC_NOT_FOUND, "Book does not exist");
             return;
         }
 
         try {
             Jsonb jsonb = JsonbBuilder.create();
-            MemberDTO member = jsonb.fromJson(req.getReader(), MemberDTO.class);
+            BookDTO book = jsonb.fromJson(req.getReader(), BookDTO.class);
             if (method.equals("POST") &&
-                    (member.getNic() == null || !member.getNic().matches("\\d{9}[Vv]"))) {
-                throw new ValidationException("Invalid NIC");
-            } else if (member.getName() == null || !member.getName().matches("[A-Za-z ]+")) {
+                    (book.getIsbn() == null || !book.getIsbn().matches("\\d{9}"))) {
+                throw new ValidationException("Invalid ISBN");
+            } else if (book.getName() == null || !book.getName().matches("[A-Za-z ]+")) {
                 throw new ValidationException("Invalid Name");
-            } else if (member.getContact() == null || !member.getContact().matches("\\d{3}-\\d{7}")) {
-                throw new ValidationException("Invalid contact number");
+            } else if (book.getAuthor() == null || !book.getAuthor().matches("[A-Za-z ]+")) {
+                throw new ValidationException("Invalid  Author Name");
             }
 
             if (method.equals("PUT")) {
-                member.setNic(pathInfo.replaceAll("[/]", ""));
+                book.setIsbn(pathInfo.replaceAll("[/]", ""));
             }
 
             try (Connection connection = pool.getConnection()) {
-                PreparedStatement stm = connection.prepareStatement("SELECT * FROM member WHERE nic=?");
-                stm.setString(1, member.getNic());
+                PreparedStatement stm = connection.prepareStatement("SELECT * FROM book WHERE isbn=?");
+                stm.setString(1, book.getIsbn());
                 ResultSet rst = stm.executeQuery();
 
                 if (rst.next()) {
                     if (method.equals("POST")) {
-                        res.sendError(HttpServletResponse.SC_CONFLICT, "Member already exists");
+                        res.sendError(HttpServletResponse.SC_CONFLICT, "Book already exists");
                     } else {
-                        stm = connection.prepareStatement("UPDATE member SET name=?, contact=? WHERE nic=?");
-                        stm.setString(1, member.getName());
-                        stm.setString(2, member.getContact());
-                        stm.setString(3, member.getNic());
+                        stm = connection.prepareStatement("UPDATE book SET name=?, author=? WHERE isbn=?");
+                        stm.setString(1, book.getName());
+                        stm.setString(2, book.getAuthor());
+                        stm.setString(3, book.getIsbn());
                         if (stm.executeUpdate() != 1) {
-                            throw new RuntimeException("Failed to update the member");
+                            throw new RuntimeException("Failed to update the book");
                         }
                         res.setStatus(HttpServletResponse.SC_NO_CONTENT);
                     }
                 } else {
-                    stm = connection.prepareStatement("INSERT INTO member (nic, name, contact) VALUES (?,?,?)");
-                    stm.setString(1, member.getNic());
-                    stm.setString(2, member.getName());
-                    stm.setString(3, member.getContact());
+                    stm = connection.prepareStatement("INSERT INTO book (isbn, name, author) VALUES (?,?,?)");
+                    stm.setString(1, book.getIsbn());
+                    stm.setString(2, book.getName());
+                    stm.setString(3, book.getAuthor());
                     if (stm.executeUpdate() != 1) {
-                        throw new RuntimeException("Failed to register the member");
+                        throw new RuntimeException("Failed to register the Book");
                     }
                     res.setStatus(HttpServletResponse.SC_CREATED);
                 }

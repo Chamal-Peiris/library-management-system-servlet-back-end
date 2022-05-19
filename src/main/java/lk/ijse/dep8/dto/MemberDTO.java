@@ -10,6 +10,12 @@ public class MemberDTO implements Serializable {
     public MemberDTO() {
     }
 
+    public MemberDTO(String nic, String name, String contact) {
+        this.nic = nic;
+        this.name = name;
+        this.contact = contact;
+    }
+
     public String getNic() {
         return nic;
     }
