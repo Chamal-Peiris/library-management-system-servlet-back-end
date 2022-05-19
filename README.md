@@ -1,5 +1,5 @@
 # Library Management System `Servlet-Back-End`
-** A REST web service created with JavaEE and servlet technologies, to expose the necessary end points related to a fully functional library **
+**A REST web service created with JavaEE and servlet technologies, to expose the necessary end points related to a fully functional library**
 ### How to use this repo?
 
 1. Clone the repository first  'git clone'
